@@ -1,0 +1,1652 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Финансовый трекер</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-light: #6366f1;
+            --error: #ef4444;
+            --background: #f9fafb;
+            --surface: #ffffff;
+            --on-surface: #1f2937;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--background);
+            color: var(--on-surface);
+        }
+
+        .ripple {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .ripple:after {
+            content: "";
+            display: block;
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            background-image: radial-gradient(circle, #fff 10%, transparent 10.01%);
+            background-repeat: no-repeat;
+            background-position: 50%;
+            transform: scale(10, 10);
+            opacity: 0;
+            transition: transform .5s, opacity 1s;
+        }
+
+        .ripple:active:after {
+            transform: scale(0, 0);
+            opacity: .3;
+            transition: 0s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.3s ease-out forwards;
+        }
+
+        .progress-bar {
+            transition: width 0.6s ease;
+        }
+
+        .scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        .scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+
+        .scrollbar::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+
+        .scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #a1a1a1;
+        }
+
+        .success-animation {
+            animation: successAnimation 2s ease-out forwards;
+        }
+
+        @keyframes successAnimation {
+            0% { opacity: 0; transform: scale(0.8); }
+            20% { opacity: 1; transform: scale(1.1); }
+            40% { transform: scale(1); }
+            80% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+    </style>
+</head>
+<body class="min-h-screen pb-20">
+    <!-- Header -->
+    <header class="bg-white shadow-sm sticky top-0 z-10">
+        <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+            <h1 class="text-xl font-semibold text-gray-800">Финансовый трекер</h1>
+            <div class="flex items-center space-x-2">
+                <button id="stats-btn" class="p-2 rounded-full ripple hover:bg-gray-100">
+                    <span class="material-icons text-gray-600">insert_chart</span>
+                </button>
+                <button id="filter-btn" class="p-2 rounded-full ripple hover:bg-gray-100">
+                    <span class="material-icons text-gray-600">filter_alt</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-4">
+        <!-- Balance Card -->
+        <div class="bg-white rounded-xl shadow-sm p-4 mb-4">
+            <div class="flex justify-between items-center mb-2">
+                <h2 class="text-lg font-medium text-gray-700">Общий баланс</h2>
+                <span id="balance-change" class="text-sm font-medium"></span>
+            </div>
+            <h3 id="total-balance" class="text-3xl font-bold mb-2">0 UZS</h3>
+            <div class="w-full bg-gray-200 rounded-full h-2">
+                <div id="balance-progress" class="bg-indigo-600 h-2 rounded-full progress-bar" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <!-- Stats Cards -->
+        <div id="stats-cards" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <!-- Income Card -->
+            <div class="bg-white rounded-xl shadow-sm p-4">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="text-sm font-medium text-gray-500">Доходы</h3>
+                    <span class="material-icons text-green-500">trending_up</span>
+                </div>
+                <h4 id="total-income" class="text-xl font-bold mb-2">0 UZS</h4>
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div id="income-progress" class="bg-green-500 h-2 rounded-full progress-bar" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- Expense Card -->
+            <div class="bg-white rounded-xl shadow-sm p-4">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="text-sm font-medium text-gray-500">Расходы</h3>
+                    <span class="material-icons text-red-500">trending_down</span>
+                </div>
+                <h4 id="total-expense" class="text-xl font-bold mb-2">0 UZS</h4>
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div id="expense-progress" class="bg-red-500 h-2 rounded-full progress-bar" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- Cards Summary -->
+            <div class="bg-white rounded-xl shadow-sm p-4">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="text-sm font-medium text-gray-500">Карты</h3>
+                    <button id="show-all-cards" class="text-sm font-medium text-indigo-600 ripple">Все</button>
+                </div>
+                <div id="cards-summary" class="flex flex-col space-y-2">
+                    <!-- Cards will be added here dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Transactions -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
+                <h2 class="text-lg font-medium text-gray-700">Транзакции</h2>
+                <div class="flex space-x-1">
+                    <button id="all-transactions" class="px-3 py-1 text-sm font-medium rounded-full ripple bg-indigo-600 text-white">Все</button>
+                    <button id="income-transactions" class="px-3 py-1 text-sm font-medium rounded-full ripple bg-gray-200 text-gray-700">Доходы</button>
+                    <button id="expense-transactions" class="px-3 py-1 text-sm font-medium rounded-full ripple bg-gray-200 text-gray-700">Расходы</button>
+                </div>
+            </div>
+            <div id="transactions-list" class="divide-y divide-gray-100 max-h-96 overflow-y-auto scrollbar">
+                <!-- Transactions will be added here dynamically -->
+            </div>
+        </div>
+    </main>
+
+    <!-- FAB -->
+    <div class="fixed bottom-6 right-6 z-20">
+        <div id="fab" class="w-14 h-14 bg-indigo-600 rounded-full shadow-lg flex items-center justify-center ripple">
+            <span class="material-icons text-white">add</span>
+        </div>
+
+        <!-- Speed Dial -->
+        <div id="speed-dial" class="hidden absolute bottom-16 right-0 flex flex-col items-center space-y-2">
+            <button id="add-income" class="w-12 h-12 bg-green-500 rounded-full shadow flex items-center justify-center ripple">
+                <span class="material-icons text-white">call_received</span>
+            </button>
+            <button id="add-expense" class="w-12 h-12 bg-red-500 rounded-full shadow flex items-center justify-center ripple">
+                <span class="material-icons text-white">call_made</span>
+            </button>
+            <button id="add-card" class="w-12 h-12 bg-blue-500 rounded-full shadow flex items-center justify-center ripple">
+                <span class="material-icons text-white">credit_card</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Success Notification -->
+    <div id="success-notification" class="fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-4 py-2 rounded-full shadow-lg hidden success-animation">
+        Успешно!
+    </div>
+
+    <!-- Dialogs -->
+    <!-- Income Dialog -->
+    <div id="income-dialog" class="fixed inset-0 bg-black bg-opacity-50 z-30 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-xl w-full max-w-md animate-fade-in">
+            <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                <h3 class="text-lg font-medium">Добавить доход</h3>
+                <button id="close-income-dialog" class="p-1 rounded-full ripple hover:bg-gray-100">
+                    <span class="material-icons text-gray-600">close</span>
+                </button>
+            </div>
+            <div class="p-6">
+                <div class="mb-4">
+                    <label for="income-amount" class="block text-sm font-medium text-gray-700 mb-1">Сумма</label>
+                    <input type="number" id="income-amount" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Введите сумму">
+                </div>
+                <div class="mb-4">
+                    <label for="income-category" class="block text-sm font-medium text-gray-700 mb-1">Категория</label>
+                    <select id="income-category" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="Зарплата">Зарплата</option>
+                        <option value="Подарок">Подарок</option>
+                        <option value="Инвестиции">Инвестиции</option>
+                        <option value="Другое">Другое</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label for="income-payment-method" class="block text-sm font-medium text-gray-700 mb-1">Способ оплаты</label>
+                    <select id="income-payment-method" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <!-- Payment methods will be added dynamically -->
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label for="income-note" class="block text-sm font-medium text-gray-700 mb-1">Комментарий</label>
+                    <input type="text" id="income-note" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Необязательно">
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end">
+                <button id="save-income" class="px-4 py-2 bg-indigo-600 text-white rounded-md ripple hover:bg-indigo-700">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Expense Dialog -->
+    <div id="expense-dialog" class="fixed inset-0 bg-black bg-opacity-50 z-30 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-xl w-full max-w-md animate-fade-in">
+            <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                <h3 class="text-lg font-medium">Добавить расход</h3>
+                <button id="close-expense-dialog" class="p-1 rounded-full ripple hover:bg-gray-100">
+                    <span class="material-icons text-gray-600">close</span>
+                </button>
+            </div>
+            <div class="p-6">
+                <div class="mb-4">
+                    <label for="expense-amount" class="block text-sm font-medium text-gray-700 mb-1">Сумма</label>
+                    <input type="number" id="expense-amount" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Введите сумму">
+                </div>
+                <div class="mb-4">
+                    <label for="expense-category" class="block text-sm font-medium text-gray-700 mb-1">Категория</label>
+                    <select id="expense-category" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="Еда">Еда</option>
+                        <option value="Транспорт">Транспорт</option>
+                        <option value="Жилье">Жилье</option>
+                        <option value="Развлечения">Развлечения</option>
+                        <option value="Здоровье">Здоровье</option>
+                        <option value="Одежда">Одежда</option>
+                        <option value="Другое">Другое</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label for="expense-payment-method" class="block text-sm font-medium text-gray-700 mb-1">Способ оплаты</label>
+                    <select id="expense-payment-method" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <!-- Payment methods will be added dynamically -->
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label for="expense-note" class="block text-sm font-medium text-gray-700 mb-1">Комментарий</label>
+                    <input type="text" id="expense-note" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Необязательно">
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end">
+                <button id="save-expense" class="px-4 py-2 bg-indigo-600 text-white rounded-md ripple hover:bg-indigo-700">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Card Dialog -->
+    <div id="add-card-dialog" class="fixed inset-0 bg-black bg-opacity-50 z-30 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-xl w-full max-w-md animate-fade-in">
+            <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                <h3 class="text-lg font-medium">Добавить карту</h3>
+                <button id="close-add-card-dialog" class="p-1 rounded-full ripple hover:bg-gray-100">
+                    <span class="material-icons text-gray-600">close</span>
+                </button>
+            </div>
+            <div class="p-6">
+                <div class="mb-4">
+                    <label for="card-name" class="block text-sm font-medium text-gray-700 mb-1">Название</label>
+                    <input type="text" id="card-name" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Например: Моя карта">
+                </div>
+                <div class="mb-4">
+                    <label for="card-type" class="block text-sm font-medium text-gray-700 mb-1">Тип</label>
+                    <select id="card-type" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="cash">Наличные</option>
+                        <option value="visa">Visa</option>
+                        <option value="mastercard">Mastercard</option>
+                        <option value="humo">HUMO</option>
+                        <option value="uzcard">UzCard</option>
+                        <option value="other">Другое</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label for="card-balance" class="block text-sm font-medium text-gray-700 mb-1">Баланс</label>
+                    <input type="number" id="card-balance" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Введите начальный баланс">
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t border-gray-200 flex justify-end">
+                <button id="save-card" class="px-4 py-2 bg-indigo-600 text-white rounded-md ripple hover:bg-indigo-700">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- All Cards Dialog -->
+    <div id="all-cards-dialog" class="fixed inset-0 bg-black bg-opacity-50 z-30 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-xl w-full max-w-md animate-fade-in">
+            <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                <h3 class="text-lg font-medium">Все карты</h3>
+                <button id="close-all-cards-dialog" class="p-1 rounded-full ripple hover:bg-gray-100">
+                    <span class="material-icons text-gray-600">close</span>
+                </button>
+            </div>
+            <div id="all-cards-list" class="p-6 max-h-96 overflow-y-auto scrollbar">
+                <!-- Cards will be added here dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Dialog -->
+    <div id="stats-dialog" class="fixed inset-0 bg-black bg-opacity-50 z-30 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-xl w-full max-w-md animate-fade-in">
+            <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                <h3 class="text-lg font-medium">Статистика</h3>
+                <button id="close-stats-dialog" class="p-1 rounded-full ripple hover:bg-gray-100">
+                    <span class="material-icons text-gray-600">close</span>
+                </button>
+            </div>
+            <div class="p-6">
+                <div class="mb-4">
+                    <label for="stats-period" class="block text-sm font-medium text-gray-700 mb-1">Период</label>
+                    <select id="stats-period" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="month">Месяц</option>
+                        <option value="year">Год</option>
+                        <option value="all">Все время</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label for="stats-type" class="block text-sm font-medium text-gray-700 mb-1">Тип</label>
+                    <select id="stats-type" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="income">Доходы</option>
+                        <option value="expense">Расходы</option>
+                        <option value="balance">Баланс</option>
+                    </select>
+                </div>
+                <div class="h-64">
+                    <canvas id="stats-chart"></canvas>
+                </div>
+                <div id="categories-stats" class="mt-6">
+                    <!-- Categories stats will be added here dynamically -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Data
+        let transactions = [];
+        let cards = [];
+        let currentTransactionType = 'all'; // 'all', 'income', 'expense'
+        let editingTransactionId = null;
+        let editingCardId = null;
+
+        // DOM Elements
+        const fab = document.getElementById('fab');
+        const speedDial = document.getElementById('speed-dial');
+        const addIncomeBtn = document.getElementById('add-income');
+        const addExpenseBtn = document.getElementById('add-expense');
+        const addCardBtn = document.getElementById('add-card');
+        const incomeDialog = document.getElementById('income-dialog');
+        const expenseDialog = document.getElementById('expense-dialog');
+        const addCardDialog = document.getElementById('add-card-dialog');
+        const allCardsDialog = document.getElementById('all-cards-dialog');
+        const statsDialog = document.getElementById('stats-dialog');
+        const closeIncomeDialog = document.getElementById('close-income-dialog');
+        const closeExpenseDialog = document.getElementById('close-expense-dialog');
+        const closeAddCardDialog = document.getElementById('close-add-card-dialog');
+        const closeAllCardsDialog = document.getElementById('close-all-cards-dialog');
+        const closeStatsDialog = document.getElementById('close-stats-dialog');
+        const saveIncomeBtn = document.getElementById('save-income');
+        const saveExpenseBtn = document.getElementById('save-expense');
+        const saveCardBtn = document.getElementById('save-card');
+        const showAllCardsBtn = document.getElementById('show-all-cards');
+        const allTransactionsBtn = document.getElementById('all-transactions');
+        const incomeTransactionsBtn = document.getElementById('income-transactions');
+        const expenseTransactionsBtn = document.getElementById('expense-transactions');
+        const statsBtn = document.getElementById('stats-btn');
+        const successNotification = document.getElementById('success-notification');
+        const statsChartCanvas = document.getElementById('stats-chart');
+        let statsChart = null;
+
+        // Initialize
+        function init() {
+            // Load data from localStorage
+            const storedTransactions = localStorage.getItem('transactions');
+            const storedCards = localStorage.getItem('cards');
+
+            if (storedTransactions) {
+                transactions = JSON.parse(storedTransactions);
+            }
+
+            if (storedCards) {
+                cards = JSON.parse(storedCards);
+            } else {
+                // Add default cash card if no cards exist
+                cards = [
+                    {
+                        id: 'cash-1',
+                        name: 'Наличные',
+                        type: 'cash',
+                        balance: 0
+                    }
+                ];
+                localStorage.setItem('cards', JSON.stringify(cards));
+            }
+
+            // Update UI
+            updateBalance();
+            updateStats();
+            updateCardsSummary();
+            updateTransactionsList();
+
+            // Update payment methods in dialogs
+            updatePaymentMethods();
+
+            // Event listeners
+            setupEventListeners();
+        }
+
+        // Event Listeners
+        function setupEventListeners() {
+            // FAB
+            fab.addEventListener('click', toggleSpeedDial);
+
+            // Speed dial buttons
+            addIncomeBtn.addEventListener('click', () => {
+                toggleSpeedDial();
+                showIncomeDialog();
+            });
+
+            addExpenseBtn.addEventListener('click', () => {
+                toggleSpeedDial();
+                showExpenseDialog();
+            });
+
+            addCardBtn.addEventListener('click', () => {
+                toggleSpeedDial();
+                showAddCardDialog();
+            });
+
+            // Dialog close buttons
+            closeIncomeDialog.addEventListener('click', closeIncomeDialogFunc);
+            closeExpenseDialog.addEventListener('click', closeExpenseDialogFunc);
+            closeAddCardDialog.addEventListener('click', closeAddCardDialogFunc);
+            closeAllCardsDialog.addEventListener('click', closeAllCardsDialogFunc);
+            closeStatsDialog.addEventListener('click', closeStatsDialogFunc);
+
+            // Save buttons
+            saveIncomeBtn.addEventListener('click', saveIncome);
+            saveExpenseBtn.addEventListener('click', saveExpense);
+            saveCardBtn.addEventListener('click', saveCard);
+
+            // Show all cards
+            showAllCardsBtn.addEventListener('click', showAllCards);
+
+            // Transaction filters
+            allTransactionsBtn.addEventListener('click', () => {
+                currentTransactionType = 'all';
+                updateTransactionsList();
+                updateActiveTransactionFilter();
+            });
+
+            incomeTransactionsBtn.addEventListener('click', () => {
+                currentTransactionType = 'income';
+                updateTransactionsList();
+                updateActiveTransactionFilter();
+            });
+
+            expenseTransactionsBtn.addEventListener('click', () => {
+                currentTransactionType = 'expense';
+                updateTransactionsList();
+                updateActiveTransactionFilter();
+            });
+
+            // Stats
+            statsBtn.addEventListener('click', showStats);
+            document.getElementById('stats-period').addEventListener('change', renderStatsChart);
+            document.getElementById('stats-type').addEventListener('change', renderStatsChart);
+        }
+
+        // Toggle Speed Dial
+        function toggleSpeedDial() {
+            speedDial.classList.toggle('hidden');
+        }
+
+        // Show Income Dialog
+        function showIncomeDialog() {
+            // Reset form
+            document.getElementById('income-amount').value = '';
+            document.getElementById('income-note').value = '';
+            document.getElementById('income-category').selectedIndex = 0;
+            document.getElementById('income-payment-method').selectedIndex = 0;
+            editingTransactionId = null;
+
+            incomeDialog.classList.remove('hidden');
+        }
+
+        // Show Expense Dialog
+        function showExpenseDialog() {
+            // Reset form
+            document.getElementById('expense-amount').value = '';
+            document.getElementById('expense-note').value = '';
+            document.getElementById('expense-category').selectedIndex = 0;
+            document.getElementById('expense-payment-method').selectedIndex = 0;
+            editingTransactionId = null;
+
+            expenseDialog.classList.remove('hidden');
+        }
+
+        // Show Add Card Dialog
+        function showAddCardDialog() {
+            // Reset form
+            document.getElementById('card-name').value = '';
+            document.getElementById('card-type').selectedIndex = 0;
+            document.getElementById('card-balance').value = '';
+            editingCardId = null;
+
+            addCardDialog.classList.remove('hidden');
+        }
+
+        // Show Edit Transaction Dialog
+        function editTransaction(transactionId) {
+            const transaction = transactions.find(t => t.id === transactionId);
+            if (!transaction) return;
+
+            editingTransactionId = transactionId;
+
+            if (transaction.type === 'income') {
+                document.getElementById('income-amount').value = transaction.amount;
+                document.getElementById('income-note').value = transaction.note || '';
+                
+                const categorySelect = document.getElementById('income-category');
+                for (let i = 0; i < categorySelect.options.length; i++) {
+                    if (categorySelect.options[i].value === transaction.category) {
+                        categorySelect.selectedIndex = i;
+                        break;
+                    }
+                }
+                
+                const paymentMethodSelect = document.getElementById('income-payment-method');
+                for (let i = 0; i < paymentMethodSelect.options.length; i++) {
+                    if (paymentMethodSelect.options[i].value === transaction.paymentMethod) {
+                        paymentMethodSelect.selectedIndex = i;
+                        break;
+                    }
+                }
+                
+                incomeDialog.classList.remove('hidden');
+            } else {
+                document.getElementById('expense-amount').value = transaction.amount;
+                document.getElementById('expense-note').value = transaction.note || '';
+                
+                const categorySelect = document.getElementById('expense-category');
+                for (let i = 0; i < categorySelect.options.length; i++) {
+                    if (categorySelect.options[i].value === transaction.category) {
+                        categorySelect.selectedIndex = i;
+                        break;
+                    }
+                }
+                
+                const paymentMethodSelect = document.getElementById('expense-payment-method');
+                for (let i = 0; i < paymentMethodSelect.options.length; i++) {
+                    if (paymentMethodSelect.options[i].value === transaction.paymentMethod) {
+                        paymentMethodSelect.selectedIndex = i;
+                        break;
+                    }
+                }
+                
+                expenseDialog.classList.remove('hidden');
+            }
+        }
+
+        // Delete Transaction
+        function deleteTransaction(transactionId) {
+            if (!confirm('Вы уверены, что хотите удалить эту транзакцию?')) return;
+
+            const transactionIndex = transactions.findIndex(t => t.id === transactionId);
+            if (transactionIndex === -1) return;
+
+            const transaction = transactions[transactionIndex];
+            
+            // Update card balance
+            const card = cards.find(c => c.id === transaction.paymentMethod);
+            if (card) {
+                if (transaction.type === 'income') {
+                    card.balance -= transaction.amount;
+                } else {
+                    card.balance += transaction.amount;
+                }
+                localStorage.setItem('cards', JSON.stringify(cards));
+            }
+
+            // Remove transaction
+            transactions.splice(transactionIndex, 1);
+            localStorage.setItem('transactions', JSON.stringify(transactions));
+
+            // Update UI
+            updateBalance();
+            updateStats();
+            updateTransactionsList();
+            updateCardsSummary();
+
+            // Show success
+            showSuccess();
+        }
+
+        // Show Edit Card Dialog
+        function editCard(cardId) {
+            const card = cards.find(c => c.id === cardId);
+            if (!card) return;
+
+            editingCardId = cardId;
+
+            document.getElementById('card-name').value = card.name;
+            document.getElementById('card-balance').value = card.balance;
+            
+            const typeSelect = document.getElementById('card-type');
+            for (let i = 0; i < typeSelect.options.length; i++) {
+                if (typeSelect.options[i].value === card.type) {
+                    typeSelect.selectedIndex = i;
+                    break;
+                }
+            }
+            
+            addCardDialog.classList.remove('hidden');
+        }
+
+        // Delete Card
+        function deleteCard(cardId) {
+            // Check if card has transactions
+            const hasTransactions = transactions.some(t => t.paymentMethod === cardId);
+            if (hasTransactions) {
+                alert('Нельзя удалить карту, у которой есть транзакции. Сначала удалите или измените связанные транзакции.');
+                return;
+            }
+
+            if (!confirm('Вы уверены, что хотите удалить эту карту?')) return;
+
+            const cardIndex = cards.findIndex(c => c.id === cardId);
+            if (cardIndex === -1) return;
+
+            // Remove card
+            cards.splice(cardIndex, 1);
+            localStorage.setItem('cards', JSON.stringify(cards));
+
+            // Update UI
+            updateCardsSummary();
+            updatePaymentMethods();
+
+            // Close dialog if open
+            if (allCardsDialog.classList.contains('hidden')) {
+                showAllCards();
+            } else {
+                updateAllCardsList();
+            }
+
+            // Show success
+            showSuccess();
+        }
+
+        // Close Dialogs
+        function closeIncomeDialogFunc() {
+            incomeDialog.classList.add('hidden');
+        }
+
+        function closeExpenseDialogFunc() {
+            expenseDialog.classList.add('hidden');
+        }
+
+        function closeAddCardDialogFunc() {
+            addCardDialog.classList.add('hidden');
+        }
+
+        function closeAllCardsDialogFunc() {
+            allCardsDialog.classList.add('hidden');
+        }
+
+        function closeStatsDialogFunc() {
+            statsDialog.classList.add('hidden');
+        }
+
+        // Save Income
+        function saveIncome() {
+            const amount = parseFloat(document.getElementById('income-amount').value);
+            const category = document.getElementById('income-category').value;
+            const paymentMethod = document.getElementById('income-payment-method').value;
+            const note = document.getElementById('income-note').value;
+
+            if (!amount || amount <= 0) {
+                alert('Введите корректную сумму');
+                return;
+            }
+
+            if (!paymentMethod) {
+                alert('Выберите способ оплаты');
+                return;
+            }
+
+            const now = new Date();
+            const date = now.toISOString().split('T')[0];
+
+            if (editingTransactionId) {
+                // Update existing transaction
+                const transactionIndex = transactions.findIndex(t => t.id === editingTransactionId);
+                if (transactionIndex !== -1) {
+                    const oldTransaction = transactions[transactionIndex];
+                    
+                    // Revert old transaction's effect on card balance
+                    const oldCard = cards.find(c => c.id === oldTransaction.paymentMethod);
+                    if (oldCard) {
+                        oldCard.balance -= oldTransaction.amount;
+                    }
+                    
+                    // Update transaction
+                    transactions[transactionIndex] = {
+                        ...oldTransaction,
+                        amount,
+                        category,
+                        paymentMethod,
+                        note,
+                        date
+                    };
+                    
+                    // Apply new transaction's effect on card balance
+                    const newCard = cards.find(c => c.id === paymentMethod);
+                    if (newCard) {
+                        newCard.balance += amount;
+                    }
+                }
+            } else {
+                // Add new transaction
+                const newTransaction = {
+                    id: Date.now().toString(),
+                    type: 'income',
+                    amount,
+                    category,
+                    paymentMethod,
+                    note,
+                    date
+                };
+                transactions.push(newTransaction);
+
+                // Update card balance
+                const card = cards.find(c => c.id === paymentMethod);
+                if (card) {
+                    card.balance += amount;
+                }
+            }
+
+            // Save data
+            localStorage.setItem('transactions', JSON.stringify(transactions));
+            localStorage.setItem('cards', JSON.stringify(cards));
+
+            // Update UI
+            updateBalance();
+            updateStats();
+            updateTransactionsList();
+            updateCardsSummary();
+
+            // Close dialog
+            closeIncomeDialogFunc();
+
+            // Show success
+            showSuccess();
+        }
+
+        // Save Expense
+        function saveExpense() {
+            const amount = parseFloat(document.getElementById('expense-amount').value);
+            const category = document.getElementById('expense-category').value;
+            const paymentMethod = document.getElementById('expense-payment-method').value;
+            const note = document.getElementById('expense-note').value;
+
+            if (!amount || amount <= 0) {
+                alert('Введите корректную сумму');
+                return;
+            }
+
+            if (!paymentMethod) {
+                alert('Выберите способ оплаты');
+                return;
+            }
+
+            const now = new Date();
+            const date = now.toISOString().split('T')[0];
+
+            if (editingTransactionId) {
+                // Update existing transaction
+                const transactionIndex = transactions.findIndex(t => t.id === editingTransactionId);
+                if (transactionIndex !== -1) {
+                    const oldTransaction = transactions[transactionIndex];
+                    
+                    // Revert old transaction's effect on card balance
+                    const oldCard = cards.find(c => c.id === oldTransaction.paymentMethod);
+                    if (oldCard) {
+                        oldCard.balance += oldTransaction.amount;
+                    }
+                    
+                    // Update transaction
+                    transactions[transactionIndex] = {
+                        ...oldTransaction,
+                        amount,
+                        category,
+                        paymentMethod,
+                        note,
+                        date
+                    };
+                    
+                    // Apply new transaction's effect on card balance
+                    const newCard = cards.find(c => c.id === paymentMethod);
+                    if (newCard) {
+                        newCard.balance -= amount;
+                    }
+                }
+            } else {
+                // Add new transaction
+                const newTransaction = {
+                    id: Date.now().toString(),
+                    type: 'expense',
+                    amount,
+                    category,
+                    paymentMethod,
+                    note,
+                    date
+                };
+                transactions.push(newTransaction);
+
+                // Update card balance
+                const card = cards.find(c => c.id === paymentMethod);
+                if (card) {
+                    card.balance -= amount;
+                }
+            }
+
+            // Save data
+            localStorage.setItem('transactions', JSON.stringify(transactions));
+            localStorage.setItem('cards', JSON.stringify(cards));
+
+            // Update UI
+            updateBalance();
+            updateStats();
+            updateTransactionsList();
+            updateCardsSummary();
+
+            // Close dialog
+            closeExpenseDialogFunc();
+
+            // Show success
+            showSuccess();
+        }
+
+        // Save Card
+        function saveCard() {
+            const name = document.getElementById('card-name').value.trim();
+            const type = document.getElementById('card-type').value;
+            const balance = parseFloat(document.getElementById('card-balance').value) || 0;
+
+            if (!name) {
+                alert('Введите название карты');
+                return;
+            }
+
+            if (editingCardId) {
+                // Update existing card
+                const cardIndex = cards.findIndex(c => c.id === editingCardId);
+                if (cardIndex !== -1) {
+                    cards[cardIndex] = {
+                        ...cards[cardIndex],
+                        name,
+                        type,
+                        balance
+                    };
+                }
+            } else {
+                // Add new card
+                const newCard = {
+                    id: `${type}-${Date.now()}`,
+                    name,
+                    type,
+                    balance
+                };
+                cards.push(newCard);
+            }
+
+            // Save data
+            localStorage.setItem('cards', JSON.stringify(cards));
+
+            // Update UI
+            updateCardsSummary();
+            updatePaymentMethods();
+
+            // Close dialog
+            closeAddCardDialogFunc();
+
+            // Show success
+            showSuccess();
+        }
+
+        // Show All Cards
+        function showAllCards() {
+            updateAllCardsList();
+            allCardsDialog.classList.remove('hidden');
+        }
+
+        // Update All Cards List
+        function updateAllCardsList() {
+            const allCardsList = document.getElementById('all-cards-list');
+            allCardsList.innerHTML = '';
+
+            if (cards.length === 0) {
+                allCardsList.innerHTML = '<p class="text-gray-500 text-center py-4">Нет карт</p>';
+                return;
+            }
+
+            cards.forEach(card => {
+                const cardElement = document.createElement('div');
+                cardElement.className = 'bg-white rounded-lg shadow-sm p-4 mb-3 fade-in';
+                
+                // Card icon based on type
+                let icon = 'credit_card';
+                let iconColor = 'text-gray-600';
+                
+                switch (card.type) {
+                    case 'cash':
+                        icon = 'payments';
+                        iconColor = 'text-green-500';
+                        break;
+                    case 'visa':
+                        iconColor = 'text-blue-500';
+                        break;
+                    case 'mastercard':
+                        iconColor = 'text-red-500';
+                        break;
+                    case 'humo':
+                        icon = 'account_balance';
+                        iconColor = 'text-purple-500';
+                        break;
+                    case 'uzcard':
+                        icon = 'account_balance';
+                        iconColor = 'text-orange-500';
+                        break;
+                }
+                
+                cardElement.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <div class="flex items-center space-x-3">
+                            <span class="material-icons ${iconColor}">${icon}</span>
+                            <div>
+                                <h4 class="font-medium">${card.name}</h4>
+                                <p class="text-sm text-gray-500 capitalize">${card.type === 'cash' ? 'Наличные' : card.type}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span class="font-semibold">${formatCurrency(card.balance)}</span>
+                            <button onclick="editCard('${card.id}')" class="p-1 rounded-full ripple hover:bg-gray-100">
+                                <span class="material-icons text-gray-600">edit</span>
+                            </button>
+                            <button onclick="deleteCard('${card.id}')" class="p-1 rounded-full ripple hover:bg-gray-100">
+                                <span class="material-icons text-red-500">delete</span>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                allCardsList.appendChild(cardElement);
+            });
+        }
+
+        // Update Payment Methods
+        function updatePaymentMethods() {
+            const incomePaymentMethod = document.getElementById('income-payment-method');
+            const expensePaymentMethod = document.getElementById('expense-payment-method');
+            
+            incomePaymentMethod.innerHTML = '';
+            expensePaymentMethod.innerHTML = '';
+            
+            if (cards.length === 0) {
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = 'Нет доступных карт';
+                incomePaymentMethod.appendChild(option.cloneNode(true));
+                expensePaymentMethod.appendChild(option);
+                return;
+            }
+            
+            cards.forEach(card => {
+                const option = document.createElement('option');
+                option.value = card.id;
+                
+                let cardName = card.name;
+                if (card.type === 'cash') {
+                    cardName = 'Наличные';
+                } else if (card.type === 'visa') {
+                    cardName = 'Visa •••• ' + card.id.slice(-4);
+                } else if (card.type === 'mastercard') {
+                    cardName = 'Mastercard •••• ' + card.id.slice(-4);
+                } else if (card.type === 'humo') {
+                    cardName = 'HUMO •••• ' + card.id.slice(-4);
+                } else if (card.type === 'uzcard') {
+                    cardName = 'UzCard •••• ' + card.id.slice(-4);
+                } else {
+                    cardName = card.name + ' •••• ' + card.id.slice(-4);
+                }
+                
+                option.textContent = cardName;
+                incomePaymentMethod.appendChild(option.cloneNode(true));
+                expensePaymentMethod.appendChild(option);
+            });
+        }
+
+        // Update Balance
+        function updateBalance() {
+            const now = new Date();
+            const currentMonth = now.getMonth();
+            const currentYear = now.getFullYear();
+            
+            // Filter transactions for current month
+            const currentMonthTransactions = transactions.filter(transaction => {
+                const transactionDate = new Date(transaction.date);
+                return transactionDate.getMonth() === currentMonth && 
+                       transactionDate.getFullYear() === currentYear;
+            });
+            
+            // Calculate total balance
+            let totalBalance = 0;
+            cards.forEach(card => {
+                totalBalance += card.balance;
+            });
+            
+            // Calculate income and expense for current month
+            let income = 0;
+            let expense = 0;
+            
+            currentMonthTransactions.forEach(transaction => {
+                if (transaction.type === 'income') {
+                    income += transaction.amount;
+                } else {
+                    expense += transaction.amount;
+                }
+            });
+            
+            // Calculate balance change compared to previous month
+            let balanceChange = 0;
+            if (transactions.length > 0) {
+                const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+                const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+                
+                const prevMonthTransactions = transactions.filter(transaction => {
+                    const transactionDate = new Date(transaction.date);
+                    return transactionDate.getMonth() === prevMonth && 
+                           transactionDate.getFullYear() === prevYear;
+                });
+                
+                let prevIncome = 0;
+                let prevExpense = 0;
+                
+                prevMonthTransactions.forEach(transaction => {
+                    if (transaction.type === 'income') {
+                        prevIncome += transaction.amount;
+                    } else {
+                        prevExpense += transaction.amount;
+                    }
+                });
+                
+                const prevBalance = prevIncome - prevExpense;
+                const currentBalance = income - expense;
+                
+                if (prevBalance !== 0) {
+                    balanceChange = ((currentBalance - prevBalance) / prevBalance) * 100;
+                }
+            }
+            
+            // Update UI
+            document.getElementById('total-balance').textContent = formatCurrency(totalBalance);
+            
+            const balanceChangeElement = document.getElementById('balance-change');
+            if (balanceChange > 0) {
+                balanceChangeElement.textContent = `+${balanceChange.toFixed(1)}%`;
+                balanceChangeElement.className = 'text-sm font-medium text-green-500';
+            } else if (balanceChange < 0) {
+                balanceChangeElement.textContent = `${balanceChange.toFixed(1)}%`;
+                balanceChangeElement.className = 'text-sm font-medium text-red-500';
+            } else {
+                balanceChangeElement.textContent = '0%';
+                balanceChangeElement.className = 'text-sm font-medium text-gray-500';
+            }
+            
+            // Update balance progress bar (not really meaningful, just for visual)
+            const balanceProgress = document.getElementById('balance-progress');
+            const progressPercentage = Math.min(100, Math.max(0, (totalBalance / 10000000) * 100));
+            balanceProgress.style.width = `${progressPercentage}%`;
+        }
+
+        // Update Stats
+        function updateStats() {
+            const now = new Date();
+            const currentMonth = now.getMonth();
+            const currentYear = now.getFullYear();
+            
+            // Filter transactions for current month
+            const currentMonthTransactions = transactions.filter(transaction => {
+                const transactionDate = new Date(transaction.date);
+                return transactionDate.getMonth() === currentMonth && 
+                       transactionDate.getFullYear() === currentYear;
+            });
+            
+            // Calculate income and expense for current month
+            let income = 0;
+            let expense = 0;
+            
+            currentMonthTransactions.forEach(transaction => {
+                if (transaction.type === 'income') {
+                    income += transaction.amount;
+                } else {
+                    expense += transaction.amount;
+                }
+            });
+            
+            // Update UI
+            document.getElementById('total-income').textContent = formatCurrency(income);
+            document.getElementById('total-expense').textContent = formatCurrency(expense);
+            
+            // Update progress bars
+            const incomeProgress = document.getElementById('income-progress');
+            const expenseProgress = document.getElementById('expense-progress');
+            
+            // These are just for visual effect, not real percentages
+            const incomePercentage = Math.min(100, Math.max(0, (income / 5000000) * 100));
+            const expensePercentage = Math.min(100, Math.max(0, (expense / 5000000) * 100));
+            
+            incomeProgress.style.width = `${incomePercentage}%`;
+            expenseProgress.style.width = `${expensePercentage}%`;
+        }
+
+        // Update Cards Summary
+        function updateCardsSummary() {
+            const cardsSummary = document.getElementById('cards-summary');
+            cardsSummary.innerHTML = '';
+            
+            if (cards.length === 0) {
+                cardsSummary.innerHTML = '<p class="text-gray-500 text-center py-4">Нет карт</p>';
+                return;
+            }
+            
+            // Show only first 3 cards
+            const cardsToShow = cards.slice(0, 3);
+            
+            cardsToShow.forEach(card => {
+                const cardElement = document.createElement('div');
+                cardElement.className = 'flex items-center justify-between p-2 rounded-lg ripple hover:bg-gray-50 fade-in';
+                
+                // Card icon based on type
+                let icon = 'credit_card';
+                let iconColor = 'text-gray-600';
+                
+                switch (card.type) {
+                    case 'cash':
+                        icon = 'payments';
+                        iconColor = 'text-green-500';
+                        break;
+                    case 'visa':
+                        iconColor = 'text-blue-500';
+                        break;
+                    case 'mastercard':
+                        iconColor = 'text-red-500';
+                        break;
+                    case 'humo':
+                        icon = 'account_balance';
+                        iconColor = 'text-purple-500';
+                        break;
+                    case 'uzcard':
+                        icon = 'account_balance';
+                        iconColor = 'text-orange-500';
+                        break;
+                }
+                
+                cardElement.innerHTML = `
+                    <div class="flex items-center space-x-3">
+                        <span class="material-icons ${iconColor}">${icon}</span>
+                        <div>
+                            <h4 class="text-sm font-medium">${card.name}</h4>
+                            <p class="text-xs text-gray-500 capitalize">${card.type === 'cash' ? 'Наличные' : card.type}</p>
+                        </div>
+                    </div>
+                    <span class="font-medium">${formatCurrency(card.balance)}</span>
+                `;
+                
+                cardsSummary.appendChild(cardElement);
+            });
+        }
+
+        // Update Transactions List
+        function updateTransactionsList() {
+            const transactionsList = document.getElementById('transactions-list');
+            transactionsList.innerHTML = '';
+            
+            if (transactions.length === 0) {
+                transactionsList.innerHTML = '<p class="text-gray-500 text-center py-8">Нет транзакций</p>';
+                return;
+            }
+            
+            // Filter transactions by type
+            let filteredTransactions = transactions;
+            if (currentTransactionType === 'income') {
+                filteredTransactions = transactions.filter(t => t.type === 'income');
+            } else if (currentTransactionType === 'expense') {
+                filteredTransactions = transactions.filter(t => t.type === 'expense');
+            }
+            
+            // Group transactions by date
+            const groupedTransactions = {};
+            
+            filteredTransactions.forEach(transaction => {
+                if (!groupedTransactions[transaction.date]) {
+                    groupedTransactions[transaction.date] = [];
+                }
+                groupedTransactions[transaction.date].push(transaction);
+            });
+            
+            // Sort dates in descending order
+            const sortedDates = Object.keys(groupedTransactions).sort((a, b) => {
+                return new Date(b) - new Date(a);
+            });
+            
+            // Display transactions
+            sortedDates.forEach(date => {
+                const dateHeader = document.createElement('div');
+                dateHeader.className = 'px-4 py-2 bg-gray-50';
+                
+                const formattedDate = formatDate(date);
+                dateHeader.textContent = formattedDate;
+                
+                transactionsList.appendChild(dateHeader);
+                
+                // Sort transactions for this date (newest first)
+                groupedTransactions[date].sort((a, b) => {
+                    return new Date(b.date + 'T' + (b.time || '00:00:00')) - 
+                           new Date(a.date + 'T' + (a.time || '00:00:00'));
+                });
+                
+                groupedTransactions[date].forEach(transaction => {
+                    const transactionElement = document.createElement('div');
+                    transactionElement.className = 'px-4 py-3 flex items-center justify-between fade-in';
+                    
+                    // Transaction icon based on type
+                    let icon = '';
+                    let iconBg = '';
+                    let amountColor = '';
+                    
+                    if (transaction.type === 'income') {
+                        icon = 'call_received';
+                        iconBg = 'bg-green-100';
+                        amountColor = 'text-green-600';
+                    } else {
+                        icon = 'call_made';
+                        iconBg = 'bg-red-100';
+                        amountColor = 'text-red-600';
+                    }
+                    
+                    transactionElement.innerHTML = `
+                        <div class="flex items-center space-x-3">
+                            <span class="material-icons ${iconBg} text-gray-600 p-2 rounded-full">${icon}</span>
+                            <div>
+                                <h4 class="font-medium">${transaction.category}</h4>
+                                <p class="text-sm text-gray-500">${transaction.note || ''}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span class="${amountColor} font-medium">${transaction.type === 'income' ? '+' : '-'}${formatCurrency(transaction.amount)}</span>
+                            <button onclick="editTransaction('${transaction.id}')" class="p-1 rounded-full ripple hover:bg-gray-100">
+                                <span class="material-icons text-gray-600">edit</span>
+                            </button>
+                            <button onclick="deleteTransaction('${transaction.id}')" class="p-1 rounded-full ripple hover:bg-gray-100">
+                                <span class="material-icons text-red-500">delete</span>
+                            </button>
+                        </div>
+                    `;
+                    
+                    transactionsList.appendChild(transactionElement);
+                });
+            });
+        }
+
+        // Update Active Transaction Filter
+        function updateActiveTransactionFilter() {
+            allTransactionsBtn.className = 'px-3 py-1 text-sm font-medium rounded-full ripple bg-gray-200 text-gray-700';
+            incomeTransactionsBtn.className = 'px-3 py-1 text-sm font-medium rounded-full ripple bg-gray-200 text-gray-700';
+            expenseTransactionsBtn.className = 'px-3 py-1 text-sm font-medium rounded-full ripple bg-gray-200 text-gray-700';
+            
+            if (currentTransactionType === 'all') {
+                allTransactionsBtn.className = 'px-3 py-1 text-sm font-medium rounded-full ripple bg-indigo-600 text-white';
+            } else if (currentTransactionType === 'income') {
+                incomeTransactionsBtn.className = 'px-3 py-1 text-sm font-medium rounded-full ripple bg-indigo-600 text-white';
+            } else {
+                expenseTransactionsBtn.className = 'px-3 py-1 text-sm font-medium rounded-full ripple bg-indigo-600 text-white';
+            }
+        }
+
+        // Show Stats
+        function showStats() {
+            statsDialog.classList.remove('hidden');
+            renderStatsChart();
+            renderCategoriesStats();
+        }
+
+        // Render Stats Chart
+        function renderStatsChart() {
+            const period = document.getElementById('stats-period').value;
+            const type = document.getElementById('stats-type').value;
+            
+            // Prepare data based on period and type
+            let labels = [];
+            let data = [];
+            
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            
+            if (period === 'month') {
+                // Last 12 months
+                for (let i = 11; i >= 0; i--) {
+                    const date = new Date(currentYear, now.getMonth() - i, 1);
+                    const monthName = date.toLocaleString('ru', { month: 'short' });
+                    const year = date.getFullYear();
+                    
+                    labels.push(`${monthName} ${year}`);
+                    
+                    // Filter transactions for this month
+                    const monthTransactions = transactions.filter(transaction => {
+                        const transactionDate = new Date(transaction.date);
+                        return transactionDate.getMonth() === date.getMonth() && 
+                               transactionDate.getFullYear() === date.getFullYear();
+                    });
+                    
+                    // Calculate data based on type
+                    let value = 0;
+                    
+                    if (type === 'income') {
+                        monthTransactions.forEach(t => {
+                            if (t.type === 'income') value += t.amount;
+                        });
+                    } else if (type === 'expense') {
+                        monthTransactions.forEach(t => {
+                            if (t.type === 'expense') value += t.amount;
+                        });
+                    } else { // balance
+                        let income = 0;
+                        let expense = 0;
+                        
+                        monthTransactions.forEach(t => {
+                            if (t.type === 'income') income += t.amount;
+                            else expense += t.amount;
+                        });
+                        
+                        value = income - expense;
+                    }
+                    
+                    data.push(value);
+                }
+            } else if (period === 'year') {
+                // Last 5 years
+                for (let i = 4; i >= 0; i--) {
+                    const year = currentYear - i;
+                    labels.push(year.toString());
+                    
+                    // Filter transactions for this year
+                    const yearTransactions = transactions.filter(transaction => {
+                        const transactionDate = new Date(transaction.date);
+                        return transactionDate.getFullYear() === year;
+                    });
+                    
+                    // Calculate data based on type
+                    let value = 0;
+                    
+                    if (type === 'income') {
+                        yearTransactions.forEach(t => {
+                            if (t.type === 'income') value += t.amount;
+                        });
+                    } else if (type === 'expense') {
+                        yearTransactions.forEach(t => {
+                            if (t.type === 'expense') value += t.amount;
+                        });
+                    } else { // balance
+                        let income = 0;
+                        let expense = 0;
+                        
+                        yearTransactions.forEach(t => {
+                            if (t.type === 'income') income += t.amount;
+                            else expense += t.amount;
+                        });
+                        
+                        value = income - expense;
+                    }
+                    
+                    data.push(value);
+                }
+            } else { // all
+                // All time (group by year)
+                const years = new Set();
+                
+                transactions.forEach(transaction => {
+                    const transactionDate = new Date(transaction.date);
+                    years.add(transactionDate.getFullYear());
+                });
+                
+                const sortedYears = Array.from(years).sort();
+                
+                sortedYears.forEach(year => {
+                    labels.push(year.toString());
+                    
+                    // Filter transactions for this year
+                    const yearTransactions = transactions.filter(transaction => {
+                        const transactionDate = new Date(transaction.date);
+                        return transactionDate.getFullYear() === year;
+                    });
+                    
+                    // Calculate data based on type
+                    let value = 0;
+                    
+                    if (type === 'income') {
+                        yearTransactions.forEach(t => {
+                            if (t.type === 'income') value += t.amount;
+                        });
+                    } else if (type === 'expense') {
+                        yearTransactions.forEach(t => {
+                            if (t.type === 'expense') value += t.amount;
+                        });
+                    } else { // balance
+                        let income = 0;
+                        let expense = 0;
+                        
+                        yearTransactions.forEach(t => {
+                            if (t.type === 'income') income += t.amount;
+                            else expense += t.amount;
+                        });
+                        
+                        value = income - expense;
+                    }
+                    
+                    data.push(value);
+                });
+            }
+            
+            // Chart config
+            const config = {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: type === 'income' ? 'Доходы' : type === 'expense' ? 'Расходы' : 'Баланс',
+                        data: data,
+                        backgroundColor: type === 'income' ? 'rgba(16, 185, 129, 0.7)' : 
+                                         type === 'expense' ? 'rgba(239, 68, 68, 0.7)' : 'rgba(79, 70, 229, 0.7)',
+                        borderColor: type === 'income' ? 'rgb(16, 185, 129)' : 
+                                     type === 'expense' ? 'rgb(239, 68, 68)' : 'rgb(79, 70, 229)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return formatCurrencyShort(value);
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return formatCurrency(context.raw);
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            
+            // Destroy previous chart if exists
+            if (statsChart) {
+                statsChart.destroy();
+            }
+            
+            // Create new chart
+            statsChart = new Chart(statsChartCanvas, config);
+        }
+
+        // Render Categories Stats
+        function renderCategoriesStats() {
+            const period = document.getElementById('stats-period').value;
+            const type = document.getElementById('stats-type').value;
+            const categoriesStats = document.getElementById('categories-stats');
+            categoriesStats.innerHTML = '';
+            
+            // Filter transactions based on period and type
+            let filteredTransactions = transactions.filter(t => t.type === type);
+            
+            if (period === 'month') {
+                const now = new Date();
+                filteredTransactions = filteredTransactions.filter(transaction => {
+                    const transactionDate = new Date(transaction.date);
+                    return transactionDate.getMonth() === now.getMonth() && 
+                           transactionDate.getFullYear() === now.getFullYear();
+                });
+            } else if (period === 'year') {
+                const now = new Date();
+                filteredTransactions = filteredTransactions.filter(transaction => {
+                    const transactionDate = new Date(transaction.date);
+                    return transactionDate.getFullYear() === now.getFullYear();
+                });
+            }
+            
+            // Group by category
+            const categories = {};
+            let totalAmount = 0;
+            
+            filteredTransactions.forEach(transaction => {
+                if (!categories[transaction.category]) {
+                    categories[transaction.category] = 0;
+                }
+                categories[transaction.category] += transaction.amount;
+                totalAmount += transaction.amount;
+            });
+            
+            // Sort categories by amount (descending)
+            const sortedCategories = Object.keys(categories).sort((a, b) => {
+                return categories[b] - categories[a];
+            });
+            
+            // Display categories
+            if (sortedCategories.length === 0) {
+                categoriesStats.innerHTML = '<p class="text-gray-500 text-center py-4">Нет данных</p>';
+                return;
+            }
+            
+            const title = document.createElement('h4');
+            title.className = 'text-lg font-medium mb-4';
+            title.textContent = type === 'income' ? 'Доходы по категориям' : 'Расходы по категориям';
+            categoriesStats.appendChild(title);
+            
+            sortedCategories.forEach(category => {
+                const amount = categories[category];
+                const percentage = totalAmount > 0 ? (amount / totalAmount) * 100 : 0;
+                
+                const categoryElement = document.createElement('div');
+                categoryElement.className = 'mb-3 fade-in';
+                
+                categoryElement.innerHTML = `
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-sm font-medium">${category}</span>
+                        <span class="text-sm font-medium">${formatCurrency(amount)} (${percentage.toFixed(1)}%)</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="h-2 rounded-full progress-bar" style="width: ${percentage}%; background-color: ${type === 'income' ? '#10b981' : '#ef4444'}"></div>
+                    </div>
+                `;
+                
+                categoriesStats.appendChild(categoryElement);
+            });
+        }
+
+        // Show Success
+        function showSuccess() {
+            successNotification.classList.remove('hidden');
+            setTimeout(() => {
+                successNotification.classList.add('hidden');
+            }, 2000);
+        }
+
+        // Format Currency
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('ru-RU', {
+                style: 'currency',
+                currency: 'UZS',
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0
+            }).format(amount).replace('UZS', '') + ' UZS';
+        }
+
+        // Format Currency Short
+        function formatCurrencyShort(amount) {
+            if (amount >= 1000000) {
+                return (amount / 1000000).toFixed(1) + 'M';
+            } else if (amount >= 1000) {
+                return (amount / 1000).toFixed(1) + 'K';
+            }
+            return amount.toString();
+        }
+
+        // Format Date
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            const today = new Date();
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            
+            if (date.toDateString() === today.toDateString()) {
+                return 'Сегодня';
+            } else if (date.toDateString() === yesterday.toDateString()) {
+                return 'Вчера';
+            } else {
+                return date.toLocaleDateString('ru-RU', {
+                    weekday: 'long',
+                    day: 'numeric',
+                    month: 'long'
+                });
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
